@@ -3,6 +3,8 @@ from crewai import Agent
 from langchain_openai import ChatOpenAI
 from crewai_tools import SerperDevTool
 from tools.youtube_search_tools import YoutubeVideoSearchTool
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 class ResearchAgents():
@@ -11,6 +13,14 @@ class ResearchAgents():
         self.searchInternetTool = SerperDevTool()
         self.youtubeSearchTool = YoutubeVideoSearchTool()
         self.llm = ChatOpenAI(model="gpt-4-turbo-preview")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    def _safe_api_call(self, func, *args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"Error en llamada API: {str(e)}")
+            raise
 
     def research_manager(self, technologies: List[str], businessareas: List[str]) -> Agent:
         return Agent(
@@ -33,7 +43,8 @@ class ResearchAgents():
             llm=self.llm,
             tools=[self.searchInternetTool, self.youtubeSearchTool], # TODO: Add tools
             verbose=True,
-            allow_delegation=True
+            allow_delegation=True,
+            error_handler=self._safe_api_call
         )
 
     def research_agent(self) -> Agent:
@@ -52,5 +63,6 @@ class ResearchAgents():
                 """,
             tools=[self.searchInternetTool, self.youtubeSearchTool], # TODO: Add tools
             llm=self.llm,
-            verbose=True
+            verbose=True,
+            error_handler=self._safe_api_call
         )
